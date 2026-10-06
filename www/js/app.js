@@ -5,6 +5,7 @@ import { renderRunning, act as runAct, setOnChange as runCb, recoverRun } from '
 import { renderExercise, act as exAct, setOnChange as exCb, onInput } from './exercise.js';
 import { RUN_DAYS } from './content.js';
 import { runDone } from './store.js';
+import { isNative, setNativeReminders } from './native.js';
 
 const acts = { ...homeAct, ...runAct, ...exAct };
 const views = { home: renderHome, running: renderRunning, exercise: renderExercise };
@@ -51,6 +52,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyThe
 let remindT;
 function scheduleReminder() {
   clearTimeout(remindT);
+  if (isNative) return;
   const s = S().settings;
   if (!s.remindOn || !('Notification' in window) || Notification.permission !== 'granted') return;
   const [h, m] = s.remindTime.split(':').map(Number);
@@ -70,6 +72,7 @@ applyTheme();
 render();
 recoverRun();
 scheduleReminder();
+if (isNative && S().settings.remindOn) setNativeReminders(true, RUN_DAYS, S().settings.remindTime);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleReminder(); });
 navigator.storage?.persist?.();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -1,3 +1,4 @@
+import { isNative, nativeSpeak, nativeBuzz } from './native.js';
 // Small UI helpers: DOM, feedback (beep/vibrate/speech), SVG charts, overlays.
 export const $ = (s, r = document) => r.querySelector(s);
 export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -27,8 +28,9 @@ export function beep(freq = 880, ms = 160, times = 1) {
     }
   } catch {}
 }
-export const buzz = (p = 200) => { try { navigator.vibrate?.(p); } catch {} };
+export const buzz = (p = 200) => { if (nativeBuzz(p)) return; try { navigator.vibrate?.(p); } catch {} };
 export function speak(text) {
+  if (nativeSpeak(text)) return;
   try {
     if (!('speechSynthesis' in window)) return;
     speechSynthesis.cancel();
@@ -39,6 +41,7 @@ export function speak(text) {
 // ---- wake lock (keeps the screen on so GPS keeps flowing) ----
 let wl = null, wlWanted = false;
 export async function keepAwake(on) {
+  if (isNative) return; // the Android app tracks with the screen off
   wlWanted = on;
   try {
     if (on && 'wakeLock' in navigator && !wl) {

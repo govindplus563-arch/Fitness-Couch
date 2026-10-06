@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { RunTracker, haversine } from '../js/tracker.js';
+import { RunTracker, haversine } from '../www/js/tracker.js';
 
 // Deterministic RNG + gaussian noise
 let seed = 42;

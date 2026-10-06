@@ -1,7 +1,7 @@
 // Offline cache: app shell is cached on first load; network is used when available so updates arrive.
-const CACHE = 'fitness-couch-v1';
+const CACHE = 'fitness-couch-v2';
 const SHELL = ['./', 'index.html', 'css/styles.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
-  'js/app.js', 'js/tracker.js', 'js/store.js', 'js/content.js', 'js/ui.js', 'js/home.js', 'js/running.js', 'js/exercise.js'];
+  'js/app.js', 'js/tracker.js', 'js/store.js', 'js/content.js', 'js/ui.js', 'js/home.js', 'js/running.js', 'js/exercise.js', 'js/native.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

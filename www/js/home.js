@@ -5,6 +5,7 @@ import {
 } from './store.js';
 import { plannedRunToday, workoutKeyToday, weekPlan, currentWeek, QUOTES, RUN_DAYS, DAY_NAMES } from './content.js';
 import { $, esc, toast, lineChart, openOv, closeOv } from './ui.js';
+import { isNative, setNativeReminders } from './native.js';
 
 let bodyMetric = 'weight';
 let onChange = () => {};
@@ -127,7 +128,11 @@ export function onSettingChange(el) {
     if (k === 'remindOn') s.settings.remindOn = el.checked;
     if (k === 'remindTime') s.settings.remindTime = el.value || '06:30';
   });
-  if (k === 'remindOn' && el.checked && 'Notification' in window) Notification.requestPermission().then((p) => { if (p !== 'granted') toast('Notifications are blocked in browser settings'); });
+  if (isNative && (k === 'remindOn' || k === 'remindTime')) {
+    const st = S().settings;
+    setNativeReminders(st.remindOn, RUN_DAYS, st.remindTime).then((ok) => { if (st.remindOn && !ok) toast('Allow notifications for this app in Android settings'); });
+  }
+  if (!isNative && k === 'remindOn' && el.checked && 'Notification' in window) Notification.requestPermission().then((p) => { if (p !== 'granted') toast('Notifications are blocked in browser settings'); });
   onChange({ settings: true });
 }
 
@@ -139,9 +144,10 @@ function openSettings() {
       <label class="switch"><input type="checkbox" data-set="voice" ${s.voice ? 'checked' : ''}><span>Voice and sound cues during runs</span></label></div>
     <div class="card"><div class="eyebrow">Morning reminder</div>
       <label class="eyebrow" for="s-time">Run time</label><input id="s-time" class="input" type="time" data-set="remindTime" value="${s.remindTime}">
-      <button class="btn primary" data-act="set-ics">Add repeating alarm to my calendar</button>
-      <p class="muted small">Most reliable: the calendar alarm rings even when the app is closed (Mon, Wed, Fri, Sat).</p>
-      <label class="switch"><input type="checkbox" data-set="remindOn" ${s.remindOn ? 'checked' : ''}><span>Also notify me when the app is open (best effort)</span></label></div>
+      ${isNative ? `<label class="switch"><input type="checkbox" data-set="remindOn" ${s.remindOn ? 'checked' : ''}><span>Remind me on run days (Mon, Wed, Fri, Sat)</span></label>`
+      : `<button class="btn primary" data-act="set-ics">Add repeating alarm to my calendar</button>
+      <p class="muted small">Most reliable on the web: the calendar alarm rings even when the app is closed.</p>
+      <label class="switch"><input type="checkbox" data-set="remindOn" ${s.remindOn ? 'checked' : ''}><span>Also notify me when the app is open (best effort)</span></label>`}</div>
     <div class="card"><div class="eyebrow">Your data</div><p class="muted small">Everything is stored only on this phone. Export a backup now and then, especially before changing phones or clearing Chrome data.</p>
       <button class="btn ghost" data-act="set-export">Export backup</button><button class="btn ghost" data-act="set-import">Restore from backup</button>
       <input id="imp-file" type="file" accept="application/json,.json" hidden data-set="imp"><button class="btn danger" data-act="set-reset">Delete all data</button></div></div></div>`);

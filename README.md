@@ -20,6 +20,16 @@ Browser limits: Chrome stops delivering GPS to a web page when the screen is off
 ## Develop
 
 ```
-python3 -m http.server 8000   # then open http://localhost:8000
+npm run serve   # web version at http://localhost:8000
 npm test                      # tracker accuracy tests
 ```
+
+## Android app (tracks with the screen off)
+
+The same code is wrapped with [Capacitor](https://capacitorjs.com) and uses a native foreground location service
+(`@capacitor-community/background-geolocation`), so GPS keeps recording with the screen locked.
+`www/js/native.js` is the only place that knows the difference between the app and the browser.
+
+- Build: push to GitHub; the **Build Android APK** workflow produces `fitness-couch-apk` (Actions → run → Artifacts).
+- Install: download the APK to your phone, open it, allow "install unknown apps". Grant **precise** location, **Allow all the time**, notifications, and set battery to **Unrestricted** for the app.
+- Local build (needs Android SDK + JDK 21): `npx cap sync android && cd android && ./gradlew assembleDebug`

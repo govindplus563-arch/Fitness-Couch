@@ -6,6 +6,7 @@ import {
   runDone, weekKm, personalBests,
 } from './store.js';
 import { currentWeek, runFor, weekPlan, weeklyKmTarget, plannedRunToday, DAY_NAMES } from './content.js';
+import { watchGPS, isNative, openAppSettings } from './native.js';
 import { $, esc, toast, beep, buzz, speak, keepAwake, openOv, closeOv, barChart, routeSVG } from './ui.js';
 
 const FELT = [['😫', 'Very hard'], ['😕', 'Hard'], ['🙂', 'OK'], ['😀', 'Good'], ['🔥', 'Great']];
@@ -39,9 +40,12 @@ function viewRun() {
     ${target ? `<div class="card"><div class="eyebrow">This week</div><div class="row between"><b>${km.toFixed(1)} km</b><span class="muted">target ${target.toFixed(1)} km</span></div>
       <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (km / target) * 100)}%"></div></div></div>` : ''}
     <div class="card tips"><div class="eyebrow">For the most accurate distance</div>
-      <ul><li>Allow location (precise) when asked.</li><li>Go outside and wait for <b>GPS ±10 m</b> or better before you press Start.</li>
-      <li>Keep the screen on. Browsers pause GPS when the screen turns off. The app keeps it awake and has a <b>Lock</b> button so pocket touches do nothing.</li>
-      <li>Battery saver and "optimise battery" settings for Chrome can cut GPS. Turn them off for runs.</li></ul></div>
+      ${isNative ? `<ul><li>Allow location <b>precise</b> and <b>"Allow all the time"</b> when asked, so tracking survives the screen turning off.</li>
+      <li>Go outside and wait for <b>GPS ±10 m</b> or better before you press Start.</li>
+      <li>Set battery to <b>Unrestricted</b> for this app (Android Settings → Apps → Fitness Couch → Battery). Some phones kill background apps otherwise.</li>
+      <li>You'll see a "Recording your run" notification while tracking. That's what keeps it alive.</li></ul>`
+      : `<ul><li>Allow location (precise) when asked.</li><li>Go outside and wait for <b>GPS ±10 m</b> or better before you press Start.</li>
+      <li>Keep the screen on. Browsers pause GPS when the screen turns off. Install the Android app for screen-off tracking.</li></ul>`}</div>
     <button class="btn ghost" data-act="manual-run">+ Add a run manually</button>`;
 }
 
@@ -98,14 +102,12 @@ function viewLog() {
 }
 
 // =============== Live run ===============
-const geoOpts = { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 };
-
 export function openRun(mode, restored) {
   if (R) return;
   const plan = mode === 'plan' ? plannedRunToday() : null;
   R = {
     mode, plan, phase: 'ready', tracker: new RunTracker(), acc: null, lastFix: 0, err: null,
-    watchId: null, timer: null, saveT: 0, announced: 0, coachIdx: -1, targetHit: false, felt: 3, locked: false, view: null,
+    stopWatch: null, timer: null, saveT: 0, announced: 0, coachIdx: -1, targetHit: false, felt: 3, locked: false, view: null,
   };
   if (restored) {
     R.tracker = RunTracker.restore(restored.tracker);
@@ -119,16 +121,15 @@ export function openRun(mode, restored) {
 }
 
 function startWatch() {
-  if (!('geolocation' in navigator)) { R.err = 'This browser has no GPS support.'; return; }
-  R.watchId = navigator.geolocation.watchPosition(onFix, onGeoErr, geoOpts);
+  R.stopWatch = watchGPS(onFix, onGeoErr);
 }
 function stopWatch() {
-  if (R?.watchId != null) navigator.geolocation.clearWatch(R.watchId);
-  if (R) R.watchId = null;
+  if (R?.stopWatch) R.stopWatch();
+  if (R) R.stopWatch = null;
 }
 function onGeoErr(e) {
   R.err = e.code === 1
-    ? 'Location is blocked. In Chrome tap ⋮ → Settings → Site settings → Location → Allow, then reopen.'
+    ? (isNative ? 'Location is blocked. Tap here to open settings and allow location "All the time" / precise.' : 'Location is blocked. In Chrome tap ⋮ → Settings → Site settings → Location → Allow, then reopen.')
     : e.code === 2 ? 'GPS position unavailable. Move outside and try again.' : 'Waiting for GPS…';
   if (R.phase !== 'sum') setText('#gps-text', R.err);
 }
@@ -167,6 +168,7 @@ function tick() {
     txt = `GPS ±${Math.round(R.acc)} m` + (R.acc <= 10 ? ' · great' : R.acc <= 20 ? ' · good' : ' · weak');
   } else if (R.lastFix) txt = 'GPS signal lost…';
   const g = $('#gps');
+  if (g && !g.dataset.b) { g.dataset.b = 1; g.addEventListener('click', () => { if (R?.err && isNative) openAppSettings(); }); }
   if (g) { g.className = `gps ${cls}`; setText('#gps-text', txt); }
   const startBtn = $('#btn-start');
   if (startBtn && R.phase === 'ready') startBtn.classList.toggle('warn', !(R.lastFix && R.acc <= 20));
@@ -225,7 +227,7 @@ function render() {
     body = `<div class="run-body">
       <div id="gps" class="gps weak"><i></i><span id="gps-text">Searching for GPS…</span></div>
       ${R.plan ? `<div class="card"><div class="eyebrow">Plan</div><h2>${esc(R.plan.title)}</h2><p class="muted">${esc(R.plan.sub)}</p></div>` : '<div class="card"><h2>Free run</h2><p class="muted">Distance and pace are recorded automatically.</p></div>'}
-      <p class="muted center">Wait for <b>±10 m</b> or better, then start. Keep this screen open while you run.</p>
+      <p class="muted center">Wait for <b>±10 m</b> or better, then start. ${isNative ? 'Then lock your phone and put it in your pocket. Tracking continues with the screen off.' : 'Keep this screen open while you run.'}</p>
       <div class="grow"></div>
       <button id="btn-start" class="btn primary huge" data-act="run-start">START</button>
       <button class="btn ghost" data-act="run-back">Back</button></div>`;
@@ -239,7 +241,7 @@ function render() {
       <div class="row gap">${t.paused
         ? '<button class="btn primary huge grow" data-act="run-resume">RESUME</button>'
         : '<button class="btn warnb huge grow" data-act="run-pause">PAUSE</button>'}</div>
-      <div class="row gap"><button class="btn ghost grow" data-act="run-lock">🔒 Lock screen</button><button class="btn danger grow" data-act="run-finish">Finish</button></div>
+      <div class="row gap">${isNative ? '' : '<button class="btn ghost grow" data-act="run-lock">🔒 Lock screen</button>'}<button class="btn danger grow" data-act="run-finish">Finish</button></div>
       <div id="fin" class="sheet" hidden><div class="sheet-in"><h2>Finish this run?</h2><p class="muted">You can't resume once you finish.</p>
         <button class="btn primary big" data-act="run-finish-yes">Yes, finish</button><button class="btn ghost" data-act="run-finish-no">Keep running</button></div></div>
       <div id="lock" class="lock" hidden><div class="lk-time" id="lk-time">0:00</div><div class="lk-dist" id="lk-dist">0.00 km</div>
@@ -297,7 +299,7 @@ function cleanup() {
 export function runView(id) {
   const rec = S().runs.find((r) => r.id === id);
   if (!rec) return;
-  R = { phase: 'sum', view: rec, felt: rec.felt, tracker: new RunTracker(), timer: null, watchId: null };
+  R = { phase: 'sum', view: rec, felt: rec.felt, tracker: new RunTracker(), timer: null, stopWatch: null };
   render();
 }
 
